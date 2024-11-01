@@ -11,6 +11,7 @@ Testing - Arduino Front Sensor
 
 // -------------------- Function Declarations --------------------
 void write_data();
+void close_file();
 
 // -------------------- EncoderManager Class Definition --------------------
 class EncoderManager {
