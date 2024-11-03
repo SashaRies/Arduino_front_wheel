@@ -8,6 +8,9 @@ Testing - Arduino Front Sensor
 
 #include <Arduino.h>
 #include <SPI.h>
+#include <Arduino_USBHostMbed5.h>
+#include <DigitalOut.h>
+#include <FATFileSystem.h>
 
 // -------------------- Function Declarations --------------------
 void write_data();
@@ -60,9 +63,9 @@ void EncoderManager::begin() {
     pinMode(_encoderPin, OUTPUT);
     digitalWrite(_encoderPin, HIGH); // Deselect encoder
     SPI.begin();
-    SPI.setClockDivider(SPI_CLOCK_DIV16); // Adjust as needed
-    SPI.setDataMode(SPI_MODE0);
-    SPI.setBitOrder(MSBFIRST);
+    // SPI.setClockDivider(SPI_CLOCK_DIV16); // Adjust as needed
+    // SPI.setDataMode(SPI_MODE0);
+    // SPI.setBitOrder(MSBFIRST);
 
     // Initialize LS7366 Control Register 0
     selectEncoder();
@@ -137,7 +140,7 @@ int leftVelocityInt = 0;
 int rightVelocityInt = 0;
 
 // Arrays to store encoder counts and velocities
-const int MAX_ROWS = 10000;
+const int MAX_ROWS = 100;
 long countsLeft[MAX_ROWS];
 long countsRight[MAX_ROWS];
 int velocitiesLeft[MAX_ROWS];
@@ -150,11 +153,38 @@ int log_number = 0;
 
 // -------------------- Setup Function --------------------
 
+USBHostMSD msd;
+mbed::FATFileSystem usb("usb");
+
+// mbed::DigitalOut pin5(PC_6, 0);
+mbed::DigitalOut otg(PB_8, 1);
+
 void setup() {
     // Initialize pin 50 as an input with an internal pull-up resistor
     pinMode(50, INPUT_PULLUP);  Serial.begin(115200);  // Initialize Serial Communication for debugging
     pinMode(PA_15, OUTPUT); //enable the USB-A port
     digitalWrite(PA_15, HIGH);
+
+        Serial.println("Starting to connect to USB device...");
+         msd.connect();
+         while (!msd.connect()) {
+           //while (!port.connected()) {
+           delay(1000);
+         }
+        
+         Serial.println("Mounting USB device...");
+         int err =  usb.mount(&msd);
+         if (err) {
+           Serial.print("Error mounting USB device ");
+           Serial.println(err);
+           while (1);
+         }
+        
+         Serial.print("read done ");
+         mbed::fs_file_t file;
+         struct dirent *ent;
+         int dirIndex = 0;
+         int res = 0;
        
       Serial.println("Initializing Encoders...");
     
@@ -176,31 +206,8 @@ void setup() {
 
 void loop() {
     // Print the state to the Serial Monitor for debugging
-    Serial.print("Pin 50 state: ");
-    Serial.println(pinState);
     
     if (digitalRead(50) == LOW){// check if switch is pressed, then connect to usb and start logging data
-        while (!Serial);
-        Serial.println("Starting to connect to USB device...");
-         msd.connect();
-         while (!msd.connect()) {
-           //while (!port.connected()) {
-           delay(1000);
-         }
-        
-         Serial.println("Mounting USB device...");
-         int err =  usb.mount(&msd);
-         if (err) {
-           Serial.print("Error mounting USB device ");
-           Serial.println(err);
-           while (1);
-         }
-        
-         Serial.print("read done ");
-         mbed::fs_file_t file;
-         struct dirent *ent;
-         int dirIndex = 0;
-         int res = 0;
          Serial.println("Open /usb/front_wheel_data.txt");
          FILE *f = fopen("/usb/front_wheel_data.txt", "a");
          if (f == NULL) {
@@ -264,42 +271,50 @@ void loop() {
                     currentIndex++;
                     // Check if arrays are full
                     if (currentIndex >= MAX_ROWS) {
-                        // ADD CODE to save file to USB
-                        write_data();
+                        write_data(f);
                         // Reset the current index for the next batch
                         currentIndex = 1;
                         log_number += 1;
                     }
                     // Output the velocities and counts to the Serial Monitor for debugging
-                    Serial.print("Row: ");
-                    Serial.print(currentIndex);
-                    Serial.print("\tLeft Count: ");
-                    Serial.print(countsLeft[currentIndex - 1]);
-                    Serial.print("\tRight Count: ");
-                    Serial.print(countsRight[currentIndex - 1]);
-                    Serial.print("\tLeft Velocity: ");
-                    Serial.print(leftVelocity);
-                    Serial.print(" counts/s\tRight Velocity: ");
-                    Serial.print(rightVelocity);
-                    Serial.println(" counts/s");
+                    // Serial.print("Row: ");
+                    // Serial.print(currentIndex);
+                    // Serial.print("\tLeft Count: ");
+                    // Serial.print(countsLeft[currentIndex - 1]);
+                    // Serial.print("\tRight Count: ");
+                    // Serial.print(countsRight[currentIndex - 1]);
+                    // Serial.print("\tLeft Velocity: ");
+                    // Serial.print(leftVelocity);
+                    // Serial.print(" counts/s\tRight Velocity: ");
+                    // Serial.print(rightVelocity);
+                    // Serial.println(" counts/s");
                 }
         }
-        close_file()
+        close_file(f);
         //If the switch is flipped back on then repeat all data logging
     }
 
 }
 
-void write_data(){
-  err = fprintf(f, "%d,%ld,%ld,%d,%d\n", MAX_ROWS * log_number + currentIndex, countsLeft[currentIndex], countsRight[currentIndex], 
-      velocitiesLeft[currentIndex], velocitiesRight[currentIndex]);
-    if (err < 0) {
-      Serial.println("Fail :(");
-      error("error: %s (%d)\n", strerror(errno), -errno);
-    }
+void write_data(FILE* f){
+  int err;
+  Serial.println("Trying to upload data to the text file");
+  for (int i = 1; i <= currentIndex; ++i) {
+      err = fprintf(f, "%ld,%ld,%ld,%ld,%ld\n", (MAX_ROWS * log_number) + i-1, countsLeft[i-1], countsRight[i-1], 
+      velocitiesLeft[i-1], velocitiesRight[i-1]);
+
+      //err = fprintf(f, "%ld, %ld, %ld\n", (MAX_ROWS * log_number) + i-1, countsLeft[i-1], countsRight[i-1]);
+
+      if (err < 0) {
+        Serial.println("Fail :(");
+        Serial.print(-errno);
+        error("error: %s (%d)\n", strerror(errno), -errno);
+      }
+  }
 }
 
-void close_file(){
+void close_file(FILE* f){
+  int err;
   Serial.println("File closing");
   fflush(stdout);
   err = fclose(f);
@@ -315,5 +330,3 @@ void close_file(){
 }
 
 // -------------------- Function to Push Data to USB Drive --------------------
-
-
