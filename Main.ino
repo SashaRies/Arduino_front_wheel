@@ -2,6 +2,8 @@
 #include <DigitalOut.h>
 #include <FATFileSystem.h>
 
+
+
 USBHostMSD msd;
 mbed::FATFileSystem usb("usb");
 
@@ -9,7 +11,8 @@ mbed::FATFileSystem usb("usb");
 mbed::DigitalOut otg(PB_8, 1);
 
 void setup() {
-  Serial.begin(115200);
+  // Initialize pin 50 as an input with an internal pull-up resistor
+  pinMode(50, INPUT_PULLUP);  Serial.begin(115200);
   
   pinMode(PA_15, OUTPUT); //enable the USB-A port
   digitalWrite(PA_15, HIGH);
@@ -31,31 +34,42 @@ void setup() {
     while (1);
   }
   Serial.print("read done ");
+  
   mbed::fs_file_t file;
   struct dirent *ent;
   int dirIndex = 0;
   int res = 0;
-  Serial.println("Open /usb/numbers.txt");
+  Serial.println("Open /usb/front_wheel_data.txt");
 
-  FILE *f = fopen("/usb/numbers.txt", "w+");
+  FILE *f = fopen("/usb/front_wheel_data.txt", "w+");
   if (f == NULL) {
     Serial.print("Failed to open file: ");
     Serial.println(strerror(errno));
     while (1); // Halt execution
+  }
 }
 
-  for (int i = 0; i < 10; i++) {
-    Serial.print("Writing numbers (");
-    Serial.print(i);
-    Serial.println("/10)");
-    fflush(stdout);
-    err = fprintf(f, "%d\n", i);
+void loop() {
+  // Read the state of pin 50 as data log switch
+    int pinState = digitalRead(50);
+
+    // Print the state to the Serial Monitor for debugging
+    Serial.print("Pin 50 state: ");
+    Serial.println(pinState);
+
+    
+}
+
+
+void write_data(){
+  err = fprintf(f, "%d,%ld,%ld,%d,%d\n", i, countsLeft[i], countsRight[i], velocitiesLeft[i], velocitiesRight[i]);
     if (err < 0) {
       Serial.println("Fail :(");
       error("error: %s (%d)\n", strerror(errno), -errno);
     }
-  }
+}
 
+void close_file(){
   Serial.println("File closing");
   fflush(stdout);
   err = fclose(f);
@@ -68,9 +82,4 @@ void setup() {
   } else {
     Serial.println("File closed");
   }
-}
-
-void loop() {
-  // put your main code here, to run repeatedly:
-
 }
