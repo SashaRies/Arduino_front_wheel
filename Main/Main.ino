@@ -63,9 +63,8 @@ void EncoderManager::begin() {
     pinMode(_encoderPin, OUTPUT);
     digitalWrite(_encoderPin, HIGH); // Deselect encoder
     SPI.begin();
-    // SPI.setClockDivider(SPI_CLOCK_DIV16); // Adjust as needed
-    // SPI.setDataMode(SPI_MODE0);
-    // SPI.setBitOrder(MSBFIRST);
+    SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
+    SPI.beginTransaction(spiSettings);
 
     // Initialize LS7366 Control Register 0
     selectEncoder();
@@ -140,11 +139,14 @@ int leftVelocityInt = 0;
 int rightVelocityInt = 0;
 
 // Arrays to store encoder counts and velocities
-const int MAX_ROWS = 100;
+const int MAX_ROWS = 2500;
 long countsLeft[MAX_ROWS];
 long countsRight[MAX_ROWS];
 int velocitiesLeft[MAX_ROWS];
 int velocitiesRight[MAX_ROWS];
+
+// Variable to convert velocities in ticks per minute (TPM) to revolutions per minute (RPM)
+long tpm_to_rpm = 122880;
 
 // Current index for arrays
 int currentIndex = 0;
@@ -216,6 +218,8 @@ void loop() {
            while (1); // Halt execution
          }
 
+         fprintf(f, "Index, Left counts, Right counts, Left velocity (RPM), Right velocity (RPM)\n");
+
             while (digitalRead(50) == LOW) {//Once the switch is flipped off close the text file
                 unsigned long currentTime = millis();
 
@@ -264,8 +268,8 @@ void loop() {
                     countsRight[currentIndex] = (long)currentCountRight;
             
                     // Store velocities
-                    velocitiesLeft[currentIndex] = leftVelocityInt;
-                    velocitiesRight[currentIndex] = rightVelocityInt;
+                    velocitiesLeft[currentIndex] = leftVelocityInt / tpm_to_rpm;
+                    velocitiesRight[currentIndex] = rightVelocityInt / tpm_to_rpm;
             
                     // Increment the current index
                     currentIndex++;
@@ -328,5 +332,3 @@ void close_file(FILE* f){
     Serial.println("File closed");
   }
 }
-
-// -------------------- Function to Push Data to USB Drive --------------------
